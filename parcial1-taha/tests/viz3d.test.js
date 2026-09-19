@@ -52,6 +52,12 @@ test('GA fitness at x=0 is 1.2', () => {
   assert.ok(Math.abs(V.gaF(0) - 1.2) < 1e-9);
 });
 
+test('pipeline and dual are flat (no spin); legends still present', () => {
+  assert.ok(V.legends['io-pipeline']);
+  assert.ok(V.legends['dual-balance']);
+  assert.ok(V.scenes.indexOf('io-pipeline') !== -1);
+});
+
 test('project is a finite perspective map', () => {
   const cam = { yaw: 0.7, pitch: 0.4, dist: 8, scale: 70, cx: 320, cy: 180 };
   const p = V.project(1, 0.5, 0, cam);

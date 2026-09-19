@@ -1174,6 +1174,7 @@ details.solution summary {
   }
 
   var LIGHT = [0.35, 0.8, 0.45];
+  var FLAT = { 'lp-2d': 1, 'ga-landscape': 1, 'io-pipeline': 1, 'dual-balance': 1 };
 
   function Engine(canvas) {
     this.canvas = canvas;
@@ -1189,7 +1190,7 @@ details.solution summary {
     this.scene = 'lp-prism';
     this.raf = 0;
     this.running = true;
-    this.auto = !prefersReduced();
+    this.auto = false;
     this._bind();
   }
 
@@ -1209,8 +1210,9 @@ details.solution summary {
       var p = e.touches ? e.touches[0] : e;
       var dx = p.clientX - self.lastX;
       var dy = p.clientY - self.lastY;
-      self.yaw += dx * 0.008;
-      self.pitch = clamp(self.pitch + dy * 0.008, -0.2, 1.3);
+      if (FLAT[self.scene]) return;
+      self.yaw = clamp(self.yaw + dx * 0.008, 0.15, 1.25);
+      self.pitch = clamp(self.pitch + dy * 0.008, 0.2, 0.75);
       self.lastX = p.clientX;
       self.lastY = p.clientY;
       if (e.preventDefault) e.preventDefault();
@@ -1371,6 +1373,35 @@ details.solution summary {
     ctx.fillText(text, q.x, q.y - 10);
   };
 
+  function arrow2d(ctx, x1, y1, x2, y2, color, width) {
+    if (!ctx) return;
+    var dx = x2 - x1, dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / len, uy = dy / len;
+    var head = Math.min(14, len * 0.35);
+    var hx = x2 - ux * head, hy = y2 - uy * head;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width || 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(hx, hy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(hx - uy * head * 0.45, hy + ux * head * 0.45);
+    ctx.lineTo(hx + uy * head * 0.45, hy - ux * head * 0.45);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  Engine.prototype.arrow = function (a, b, color, width) {
+    var pa = this.P(a[0], a[1], a[2]);
+    var pb = this.P(b[0], b[1], b[2]);
+    arrow2d(this.ctx, pa.x, pa.y, pb.x, pb.y, color, width);
+  };
+
   Engine.prototype.caption = function (text) {
     var ctx = this.ctx;
     ctx.font = '600 13px "Source Sans 3", sans-serif';
@@ -1420,7 +1451,7 @@ details.solution summary {
   var LEGENDS = {
     'io-pipeline': {
       what: 'Las 4 fases de un estudio de IO (Taha §1.7).',
-      how: 'Se lee de izquierda a derecha. No es un cálculo: es el orden del trabajo.',
+      how: 'Se lee de izquierda a derecha, siguiendo las flechas. No gira. No es un cálculo: es el orden del trabajo.',
       nums: '1 mundo real → 2 supuestos → 3 modelo → 4 solución.'
     },
     'lp-prism': {
@@ -1459,8 +1490,8 @@ details.solution summary {
       nums: 'Mejor del cubo: 110 (proyectos 1 y 2), capital 18, Z=2,8. Óptimo real del examen: proyectos 1, 3 y 4, Z=3,4.'
     },
     'dual-balance': {
-      what: 'Metáfora de dualidad con los números de Reddy Mikks: z* = w* = 21.',
-      how: 'Mientras las placas no coinciden, z ≤ w (dualidad débil). Cuando coinciden, hay óptimo (dualidad fuerte).',
+      what: 'Dualidad en Reddy Mikks: z* = w* = 21.',
+      how: 'Se lee de izquierda a derecha. La flecha dice que en el óptimo el primal y el dual valen lo mismo. No gira.',
       nums: 'Primal max z = 5x1+4x2 = 21. Dual min w = 24y1+6y2+y3+2y4 = 21. y* = (3/4, 1/2, 0, 0).'
     }
   };
@@ -1552,7 +1583,7 @@ details.solution summary {
       var wx = lerp(A.x, B.x, u), wy = lerp(A.y, B.y, u);
       eng.dot(wr(wx, wy), 7, accent, true);
       for (i = 0; i < SIMPLEX_PATH.length - 1; i++) {
-        eng.line(wr(SIMPLEX_PATH[i].x, SIMPLEX_PATH[i].y), wr(SIMPLEX_PATH[i + 1].x, SIMPLEX_PATH[i + 1].y), accent, 3);
+        eng.arrow(wr(SIMPLEX_PATH[i].x, SIMPLEX_PATH[i].y), wr(SIMPLEX_PATH[i + 1].x, SIMPLEX_PATH[i + 1].y), accent, 3);
       }
       eng.caption('Simplex: ' + A.note + ' → ' + B.note + '   z=' + reddyZ(wx, wy).toFixed(1));
     } else {
@@ -1643,30 +1674,53 @@ details.solution summary {
     eng.caption('Método gráfico · z=' + k.toFixed(0) + ' (punteada) · óptimo (3, 1.5) z=21');
   }
 
-  function drawScenePipeline(eng, t) {
-    var labels = ['Mundo real', 'Supuestos', 'Modelo', 'Solución'];
+  function drawScenePipeline(eng) {
+    var ctx = eng.ctx;
+    if (!ctx) return;
+    var w = eng._cssW || 640, h = eng._cssH || 360;
+    var ink = cssVar('--ink', '#1F2A44');
+    var paper = cssVar('--paper-2', '#fff');
     var accent = cssVar('--accent', '#C77D1A');
     var ok = cssVar('--ok', '#2E7D5B');
-    var paper = cssVar('--paper-2', '#fff');
-    var i, x, y, z, pulse;
+    var steps = [
+      { n: '1', t: 'Mundo real', d: 'el problema' },
+      { n: '2', t: 'Supuestos', d: 'qué se ignora' },
+      { n: '3', t: 'Modelo', d: 'variables y z' },
+      { n: '4', t: 'Solución', d: 'la decisión' }
+    ];
+    var boxW = Math.min(150, (w - 80) / 4 - 20);
+    var boxH = 88;
+    var gap = 36;
+    var total = 4 * boxW + 3 * gap;
+    var x0 = (w - total) / 2;
+    var y0 = h / 2 - boxH / 2;
+    var i, x, y;
+    ctx.font = '600 14px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
     for (i = 0; i < 4; i++) {
-      x = (i - 1.5) * 1.7;
-      y = 0.35 + 0.12 * Math.sin(t * 1.4 + i);
-      z = 0.2 * Math.sin(t * 0.8 + i);
-      pulse = 0.55 + 0.08 * Math.sin(t * 2 + i);
-      var box = [
-        [x - 0.7, y, z - 0.45], [x + 0.7, y, z - 0.45],
-        [x + 0.7, y, z + 0.45], [x - 0.7, y, z + 0.45]
-      ];
-      var top = box.map(function (p) { return [p[0], p[1] + pulse, p[2]]; });
-      eng.fillPoly(box, paper, 0.9);
-      eng.fillPoly(top, i === 3 ? ok : accent, 0.8);
-      eng.label([x, y + pulse + 0.15, z], labels[i], cssVar('--ink', '#1F2A44'));
+      x = x0 + i * (boxW + gap);
+      y = y0;
+      ctx.fillStyle = paper;
+      ctx.strokeStyle = i === 3 ? ok : accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 10) : ctx.rect(x, y, boxW, boxH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = i === 3 ? ok : accent;
+      ctx.font = '700 18px "Archivo", sans-serif';
+      ctx.fillText(steps[i].n, x + boxW / 2, y + 28);
+      ctx.fillStyle = ink;
+      ctx.font = '700 14px "Source Sans 3", sans-serif';
+      ctx.fillText(steps[i].t, x + boxW / 2, y + 50);
+      ctx.font = '12px "Source Sans 3", sans-serif';
+      ctx.fillStyle = cssVar('--ink-2', '#4A5470');
+      ctx.fillText(steps[i].d, x + boxW / 2, y + 70);
       if (i < 3) {
-        eng.line([x + 0.75, y + 0.3, z], [x + 1.0, y + 0.3, z], accent, 3);
+        arrow2d(ctx, x + boxW + 4, y + boxH / 2, x + boxW + gap - 4, y + boxH / 2, accent, 3);
       }
     }
-    eng.caption('Un estudio de IO: del mundo real a una decisión, pasando por un modelo');
+    eng.caption('Orden de un estudio de IO. Se lee de izquierda a derecha.');
   }
 
   function drawSceneTransport(eng, t) {
@@ -1689,7 +1743,7 @@ details.solution summary {
     for (i = 0; i < TRANSPORT.flows.length; i++) {
       f = TRANSPORT.flows[i];
       s = spos[f.a]; d = dpos[f.b];
-      eng.line(s, d, rgba(ok, 0.7), 2.5);
+      eng.arrow(s, d, rgba(ok, 0.85), 2.5);
       mid = [(s[0] + d[0]) / 2, (s[1] + d[1]) / 2 + 0.25, (s[2] + d[2]) / 2];
       eng.label(mid, f.q + '×$' + f.c, ink);
       u = (t * 0.25 + i * 0.18) % 1;
@@ -1727,7 +1781,7 @@ details.solution summary {
       a = nodes[arcs[k][0]];
       b = nodes[arcs[k][1]];
       onPath = isOn(arcs[k][0], arcs[k][1]);
-      eng.line(a, b, onPath ? accent : rgba(ok, 0.45), onPath ? 4 : 1.5);
+      eng.arrow(a, b, onPath ? accent : rgba(ok, 0.55), onPath ? 3.5 : 1.8);
       key = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.18, (a[2] + b[2]) / 2];
       eng.label(key, String(arcs[k][2]), ink);
     }
@@ -1822,40 +1876,58 @@ details.solution summary {
         rgba(ink, 0.35), 1.5
       );
     }
-    var blink = 0.5 + 0.5 * Math.sin(t * 3);
     for (i = 0; i < bits.length; i++) {
       a = bits[i];
       used = w[0] * a[0] + w[1] * a[1] + w[2] * a[2];
       feas = used <= 20;
       g = gain[0] * a[0] + gain[1] * a[1] + gain[2] * a[2];
       p = [(a[0] - 0.5) * 2, a[2] * 1.6, (a[1] - 0.5) * 2];
-      eng.dot(p, i === best ? 8 : 5, i === best ? accent : (feas ? ok : err), i === best && blink > 0.3);
+      eng.dot(p, i === best ? 8 : 5, i === best ? accent : (feas ? ok : err), i === best);
       eng.label(p, '' + a[0] + a[1] + a[2] + (feas ? ' Z=' + g : ' no'), ink);
     }
     eng.label([0, 2.2, 0], 'ejes: proy.1 · proy.2 · proy.3', ink);
     eng.caption('Cubo de 3 proyectos. Mejor acá 110 Z=2,8. Examen (5 proy.): 1,3,4 Z=3,4');
   }
 
-  function drawSceneDual(eng, t) {
+  function drawSceneDual(eng) {
+    var ctx = eng.ctx;
+    if (!ctx) return;
+    var w = eng._cssW || 640, h = eng._cssH || 360;
+    var ink = cssVar('--ink', '#1F2A44');
+    var paper = cssVar('--paper-2', '#fff');
     var accent = cssVar('--accent', '#C77D1A');
     var ok = cssVar('--ok', '#2E7D5B');
-    var ink = cssVar('--ink', '#1F2A44');
-    var s = 0.5 + 0.5 * Math.sin(t * 0.9);
-    var zVal = 12 + s * 9;
-    var wVal = 30 - s * 9;
-    var yL = 0.25 + (zVal / 21) * 0.9;
-    var yR = 0.25 + (wVal / 21) * 0.9;
-    var left = [[-2.2, yL, -0.8], [-0.4, yL, -0.8], [-0.4, yL, 0.8], [-2.2, yL, 0.8]];
-    var right = [[0.4, yR, -0.8], [2.2, yR, -0.8], [2.2, yR, 0.8], [0.4, yR, 0.8]];
-    eng.fillPoly(left, ok, 0.8);
-    eng.fillPoly(right, accent, 0.8);
-    eng.label([-1.3, yL + 0.4, 0], 'Primal z=' + zVal.toFixed(0), ink);
-    eng.label([1.3, yR + 0.4, 0], 'Dual w=' + wVal.toFixed(0), ink);
-    if (Math.abs(zVal - wVal) < 0.8) {
-      eng.caption('Dualidad fuerte: z* = w* = 21  (Reddy Mikks)');
-    } else {
-      eng.caption('Dualidad débil: z=' + zVal.toFixed(0) + ' ≤ w=' + wVal.toFixed(0) + '  hasta el óptimo 21=21');
+    var boxW = Math.min(220, w * 0.32);
+    var boxH = 110;
+    var y = h / 2 - boxH / 2;
+    var xL = w * 0.12;
+    var xR = w * 0.88 - boxW;
+    function card(x, title, lines, color) {
+      ctx.fillStyle = paper;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, boxW, boxH, 10); else ctx.rect(x, y, boxW, boxH);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = '700 16px "Archivo", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(title, x + boxW / 2, y + 32);
+      ctx.fillStyle = ink;
+      ctx.font = '13px "Source Sans 3", sans-serif';
+      var i;
+      for (i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + boxW / 2, y + 56 + i * 18);
     }
+    card(xL, 'Primal (max)', ['z = 5x1 + 4x2', 'óptimo z* = 21'], ok);
+    card(xR, 'Dual (min)', ['w = 24y1 + 6y2 + y3 + 2y4', 'óptimo w* = 21'], accent);
+    arrow2d(ctx, xL + boxW + 8, y + boxH / 2, xR - 8, y + boxH / 2, accent, 3);
+    ctx.fillStyle = ink;
+    ctx.font = '700 14px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('z* = w* = 21', w / 2, y - 16);
+    ctx.font = '12px "Source Sans 3", sans-serif';
+    ctx.fillText('dualidad fuerte', w / 2, y);
+    eng.caption('Reddy Mikks: el primal y el dual valen lo mismo en el óptimo.');
   }
 
   var SCENES = {
@@ -1869,8 +1941,6 @@ details.solution summary {
     'binary-cube': drawSceneBinary,
     'dual-balance': drawSceneDual
   };
-  var FLAT = { 'lp-2d': 1, 'ga-landscape': 1 };
-
   Engine.prototype.draw = function (t) {
     if (!this.ctx) return;
     this.clear();
@@ -1883,7 +1953,6 @@ details.solution summary {
     var self = this;
     function frame() {
       if (!self.running) return;
-      if (self.auto && !self.dragging && !FLAT[self.scene]) self.yaw += 0.004;
       self.draw(self.now());
       self.raf = requestAnimationFrame(frame);
     }
@@ -1907,7 +1976,9 @@ details.solution summary {
     wrap.appendChild(canvas);
     var hint = document.createElement('p');
     hint.className = 'muted viz3d-hint';
-    hint.textContent = FLAT[name] ? 'Gráfico del método (no gira).' : 'Arrastre para girar. La escena gira sola.';
+    hint.textContent = FLAT[name]
+      ? 'Gráfico fijo. Se lee de izquierda a derecha.'
+      : 'Arrastre un poco para girar. No da la vuelta sola.';
     wrap.appendChild(hint);
     var L = LEGENDS[name];
     if (L) {

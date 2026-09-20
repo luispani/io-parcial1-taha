@@ -92,7 +92,26 @@
   }
 
   var LIGHT = [0.35, 0.8, 0.45];
-  var FLAT = { 'lp-2d': 1, 'ga-landscape': 1, 'io-pipeline': 1, 'dual-balance': 1 };
+  /* 2D: never orbit. Direction is always left → right. */
+  var FLAT = {
+    'lp-2d': 1, 'ga-landscape': 1, 'io-pipeline': 1,
+    'dual-balance': 1, 'transport-3d': 1, 'maxflow-pipes': 1
+  };
+  /* Draw once. No spin, no looping motion. */
+  var STATIC = {
+    'io-pipeline': 1, 'dual-balance': 1, 'transport-3d': 1, 'binary-cube': 1
+  };
+  /* Motion that teaches a step. Camera still does not auto-spin. */
+  var ANIMATED = {
+    'lp-prism': 1, 'lp-2d': 1, 'simplex-walk': 1, 'maxflow-pipes': 1, 'ga-landscape': 1
+  };
+  var PIPELINE_STEPS = [
+    { n: '1', t: 'Definir', d: 'el problema' },
+    { n: '2', t: 'Modelar', d: 'variables y z' },
+    { n: '3', t: 'Resolver', d: 'el algoritmo' },
+    { n: '4', t: 'Validar', d: '¿predice?' },
+    { n: '5', t: 'Implantar', d: 'la decisión' }
+  ];
 
   function Engine(canvas) {
     this.canvas = canvas;
@@ -108,27 +127,29 @@
     this.scene = 'lp-prism';
     this.raf = 0;
     this.running = true;
-    this.auto = false;
     this._bind();
   }
+
+  Engine.prototype.canOrbit = function () {
+    return !FLAT[this.scene] && !STATIC[this.scene];
+  };
 
   Engine.prototype._bind = function () {
     var self = this;
     var c = this.canvas;
     if (!c) return;
     this._onDown = function (e) {
+      if (!self.canOrbit()) return;
       self.dragging = true;
-      self.auto = false;
       var p = e.touches ? e.touches[0] : e;
       self.lastX = p.clientX;
       self.lastY = p.clientY;
     };
     this._onMove = function (e) {
-      if (!self.dragging) return;
+      if (!self.dragging || !self.canOrbit()) return;
       var p = e.touches ? e.touches[0] : e;
       var dx = p.clientX - self.lastX;
       var dy = p.clientY - self.lastY;
-      if (FLAT[self.scene]) return;
       self.yaw = clamp(self.yaw + dx * 0.008, 0.15, 1.25);
       self.pitch = clamp(self.pitch + dy * 0.008, 0.2, 0.75);
       self.lastX = p.clientX;
@@ -368,9 +389,9 @@
 
   var LEGENDS = {
     'io-pipeline': {
-      what: 'Las 4 fases de un estudio de IO (Taha §1.7).',
+      what: 'Las 5 fases de un estudio de IO (Taha §1.7).',
       how: 'Se lee de izquierda a derecha, siguiendo las flechas. No gira. No es un cálculo: es el orden del trabajo.',
-      nums: '1 mundo real → 2 supuestos → 3 modelo → 4 solución.'
+      nums: '1 Definir → 2 Modelar → 3 Resolver → 4 Validar → 5 Implantar.'
     },
     'lp-prism': {
       what: 'Reddy Mikks. La altura de cada punto es z = 5x1 + 4x2. El techo es un plano porque z es lineal.',
@@ -388,14 +409,14 @@
       nums: '(0,0) z=0 → entra x1 → (4,0) z=20 → entra x2 → (3, 1.5) z=21. Es el mismo camino que el tableau.'
     },
     'transport-3d': {
-      what: 'Transporte del examen 2: almacenes A,B y tiendas T1,T2,T3. Solo se dibujan los envíos óptimos.',
-      how: 'Cada arco usado muestra cantidad × costo. Los arcos no usados no llevan cajas.',
+      what: 'Transporte del examen 2: almacenes A,B a la izquierda y tiendas T1,T2,T3 a la derecha. Solo los envíos óptimos.',
+      how: 'Se lee de izquierda a derecha. Cada flecha es un envío: cantidad × costo. No gira. No hay cajas en movimiento.',
       nums: 'A→T1: 5×1 · B→T1: 3×3 · B→T2: 5×2 · B→T3: 2×1. Z = 5+9+10+2 = 26. Oferta 15 = demanda 15.'
     },
     'maxflow-pipes': {
-      what: 'Ford–Fulkerson en la red del examen 3. Origen A, destino F.',
-      how: 'Un camino de aumento por vez. El cuello es el mínimo residual de esa ruta. Se suma al acumulado hasta que no queda camino.',
-      nums: 'A-B-D-F +6 → A-B-E-F +2 → A-B-D-E-F +1 → A-C-E-F +6. Flujo 15. Corte mínimo D→F (6) + E→F (9) = 15.'
+      what: 'Ford–Fulkerson en la red del examen 3. Origen A a la izquierda, destino F a la derecha.',
+      how: 'No gira. Un camino de aumento por vez (flechas ámbar). El cuello es el mínimo residual. Se suma hasta que no queda camino.',
+      nums: 'A→B→D→F +6 → A→B→E→F +2 → A→B→D→E→F +1 → A→C→E→F +6. Flujo 15. Corte mínimo D→F (6) + E→F (9) = 15.'
     },
     'ga-landscape': {
       what: 'Aptitud real del widget: f(x) = sen(x)·sen(0,4x)+1,2 en [0, 10].',
@@ -404,7 +425,7 @@
     },
     'binary-cube': {
       what: 'Cubo 0-1 de 3 proyectos (1, 2 y 3) para poder verlo. El examen tiene 5 proyectos.',
-      how: 'Cada eje es un sí/no. Verde = cabe en el presupuesto 20. Rojo = se pasa. Ámbar = el mejor de estos 3.',
+      how: 'Vista fija. Cada eje es un sí/no. Verde = cabe en el presupuesto 20. Rojo = se pasa. Ámbar = el mejor de estos 3.',
       nums: 'Mejor del cubo: 110 (proyectos 1 y 2), capital 18, Z=2,8. Óptimo real del examen: proyectos 1, 3 y 4, Z=3,4.'
     },
     'dual-balance': {
@@ -475,12 +496,12 @@
       var col = faces[i].kind === 'top' ? ok : (faces[i].kind === 'bot' ? paper : accent);
       eng.fillPoly(faces[i].pts, col, faces[i].kind === 'top' ? 0.88 : 0.5);
     }
-    eng.line([-1.6, 0, -0.9], [3.2, 0, -0.9], rgba(ink, 0.7), 2);
-    eng.line([-1.6, 0, -0.9], [-1.6, 0, 1.6], rgba(ink, 0.7), 2);
-    eng.line([-1.6, 0, -0.9], [-1.6, 2.2, -0.9], rgba(ink, 0.7), 2);
-    eng.label([3.2, 0.05, -0.9], 'x1', ink);
-    eng.label([-1.6, 0.05, 1.7], 'x2', ink);
-    eng.label([-1.6, 2.35, -0.9], 'z', ink);
+    eng.arrow([-1.6, 0, -0.9], [3.2, 0, -0.9], rgba(ink, 0.85), 2.2);
+    eng.arrow([-1.6, 0, -0.9], [-1.6, 0, 1.6], rgba(ink, 0.85), 2.2);
+    eng.arrow([-1.6, 0, -0.9], [-1.6, 2.2, -0.9], rgba(ink, 0.85), 2.2);
+    eng.label([3.35, 0.05, -0.9], 'x1', ink);
+    eng.label([-1.6, 0.05, 1.75], 'x2', ink);
+    eng.label([-1.6, 2.4, -0.9], 'z', ink);
     var k = 8 + (0.5 + 0.5 * Math.sin(t * 0.7)) * 13;
     var yk = k / 21 * 2.2;
     eng.fillPoly([
@@ -544,11 +565,9 @@
       ctx.textAlign = 'right';
       ctx.fillText(String(i), P(0, 0).x - 6, P(0, i).y + 4);
     }
-    ctx.strokeStyle = ink; ctx.lineWidth = 1.6;
-    p = P(0, 0); q = P(6.2, 0);
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-    q = P(0, 6.2);
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+    p = P(0, 0);
+    arrow2d(ctx, p.x, p.y, P(6.2, 0).x, P(6.2, 0).y, ink, 1.8);
+    arrow2d(ctx, p.x, p.y, P(0, 6.2).x, P(0, 6.2).y, ink, 1.8);
     ctx.fillStyle = ink; ctx.font = '12px "Source Sans 3", sans-serif'; ctx.textAlign = 'left';
     ctx.fillText('x1', P(6.1, 0).x, P(6.1, 0).y - 8);
     ctx.fillText('x2', P(0, 6.1).x + 8, P(0, 6.1).y);
@@ -579,6 +598,11 @@
     p = P(0, k / 4); q = P(k / 5, 0);
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
     ctx.setLineDash([]);
+    var g0 = P(k / 10, k / 8);
+    var g1 = P(k / 10 + 0.7, k / 8 + 0.56);
+    arrow2d(ctx, g0.x, g0.y, g1.x, g1.y, ok, 2.2);
+    ctx.fillStyle = ok; ctx.font = '11px "Source Sans 3", sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('sube z', g1.x + 4, g1.y);
     for (i = 0; i < REDDY_VERTS.length; i++) {
       a = REDDY_VERTS[i];
       p = P(a.x, a.y);
@@ -600,93 +624,112 @@
     var paper = cssVar('--paper-2', '#fff');
     var accent = cssVar('--accent', '#C77D1A');
     var ok = cssVar('--ok', '#2E7D5B');
-    var steps = [
-      { n: '1', t: 'Mundo real', d: 'el problema' },
-      { n: '2', t: 'Supuestos', d: 'qué se ignora' },
-      { n: '3', t: 'Modelo', d: 'variables y z' },
-      { n: '4', t: 'Solución', d: 'la decisión' }
-    ];
-    var boxW = Math.min(150, (w - 80) / 4 - 20);
+    var n = PIPELINE_STEPS.length;
+    var gap = Math.max(16, Math.min(28, w * 0.03));
+    var boxW = Math.min(118, (w - 36 - (n - 1) * gap) / n);
     var boxH = 88;
-    var gap = 36;
-    var total = 4 * boxW + 3 * gap;
+    var total = n * boxW + (n - 1) * gap;
     var x0 = (w - total) / 2;
     var y0 = h / 2 - boxH / 2;
-    var i, x, y;
-    ctx.font = '600 14px "Source Sans 3", sans-serif';
+    var i, x, y, step;
     ctx.textAlign = 'center';
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < n; i++) {
+      step = PIPELINE_STEPS[i];
       x = x0 + i * (boxW + gap);
       y = y0;
       ctx.fillStyle = paper;
-      ctx.strokeStyle = i === 3 ? ok : accent;
+      ctx.strokeStyle = i === n - 1 ? ok : accent;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 10) : ctx.rect(x, y, boxW, boxH);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = i === 3 ? ok : accent;
-      ctx.font = '700 18px "Archivo", sans-serif';
-      ctx.fillText(steps[i].n, x + boxW / 2, y + 28);
+      ctx.fillStyle = i === n - 1 ? ok : accent;
+      ctx.font = '700 16px "Archivo", sans-serif';
+      ctx.fillText(step.n, x + boxW / 2, y + 26);
       ctx.fillStyle = ink;
-      ctx.font = '700 14px "Source Sans 3", sans-serif';
-      ctx.fillText(steps[i].t, x + boxW / 2, y + 50);
-      ctx.font = '12px "Source Sans 3", sans-serif';
+      ctx.font = '700 13px "Source Sans 3", sans-serif';
+      ctx.fillText(step.t, x + boxW / 2, y + 50);
+      ctx.font = '11px "Source Sans 3", sans-serif';
       ctx.fillStyle = cssVar('--ink-2', '#4A5470');
-      ctx.fillText(steps[i].d, x + boxW / 2, y + 70);
-      if (i < 3) {
-        arrow2d(ctx, x + boxW + 4, y + boxH / 2, x + boxW + gap - 4, y + boxH / 2, accent, 3);
+      ctx.fillText(step.d, x + boxW / 2, y + 70);
+      if (i < n - 1) {
+        arrow2d(ctx, x + boxW + 2, y + boxH / 2, x + boxW + gap - 2, y + boxH / 2, accent, 3);
       }
     }
-    eng.caption('Orden de un estudio de IO. Se lee de izquierda a derecha.');
+    eng.caption('5 fases de un estudio de IO. Se lee de izquierda a derecha.');
   }
 
-  function drawSceneTransport(eng, t) {
-    var spos = [[-2.2, 0.4, -0.8], [-2.2, 0.4, 0.9]];
-    var dpos = [[2.2, 0.4, -1.2], [2.2, 0.4, 0], [2.2, 0.4, 1.2]];
+  function node2d(ctx, x, y, r, fill, label, ink) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.font = '700 13px "Source Sans 3", sans-serif';
+    ctx.fillStyle = ink;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - r - 8);
+  }
+
+  function drawSceneTransport(eng) {
+    var ctx = eng.ctx;
+    if (!ctx) return;
+    var w = eng._cssW || 640, h = eng._cssH || 360;
     var accent = cssVar('--accent', '#C77D1A');
     var ok = cssVar('--ok', '#2E7D5B');
     var ink = cssVar('--ink', '#1F2A44');
-    var i, s, d, f, u, mid;
+    var sx = 70;
+    var dx = w - 80;
+    var spos = [{ x: sx, y: h * 0.34 }, { x: sx, y: h * 0.70 }];
+    var dpos = [{ x: dx, y: h * 0.24 }, { x: dx, y: h * 0.50 }, { x: dx, y: h * 0.76 }];
+    var i, s, d, f, midX, midY;
     for (i = 0; i < TRANSPORT.sources.length; i++) {
       s = TRANSPORT.sources[i];
-      eng.dot(spos[i], 10, ok, true);
-      eng.label([spos[i][0], spos[i][1] + 0.55, spos[i][2]], s.n + ' oferta ' + s.s, ink);
+      node2d(ctx, spos[i].x, spos[i].y, 12, ok, s.n + '  oferta ' + s.s, ink);
     }
     for (i = 0; i < TRANSPORT.dests.length; i++) {
       d = TRANSPORT.dests[i];
-      eng.dot(dpos[i], 10, accent, true);
-      eng.label([dpos[i][0], dpos[i][1] + 0.55, dpos[i][2]], d.n + ' dem. ' + d.d, ink);
+      node2d(ctx, dpos[i].x, dpos[i].y, 12, accent, d.n + '  dem. ' + d.d, ink);
     }
+    ctx.font = '12px "JetBrains Mono", monospace';
     for (i = 0; i < TRANSPORT.flows.length; i++) {
       f = TRANSPORT.flows[i];
       s = spos[f.a]; d = dpos[f.b];
-      eng.arrow(s, d, rgba(ok, 0.85), 2.5);
-      mid = [(s[0] + d[0]) / 2, (s[1] + d[1]) / 2 + 0.25, (s[2] + d[2]) / 2];
-      eng.label(mid, f.q + '×$' + f.c, ink);
-      u = (t * 0.25 + i * 0.18) % 1;
-      eng.dot([lerp(s[0], d[0], u), lerp(s[1], d[1], u) + 0.2 * Math.sin(u * Math.PI), lerp(s[2], d[2], u)], 4, accent, false);
+      arrow2d(ctx, s.x + 14, s.y, d.x - 14, d.y, rgba(ok, 0.9), 2.4);
+      midX = (s.x + d.x) / 2;
+      midY = (s.y + d.y) / 2 - 8;
+      ctx.fillStyle = ink;
+      ctx.textAlign = 'center';
+      ctx.fillText(f.q + '×$' + f.c, midX, midY);
     }
-    eng.caption('Óptimo: Z = 5×1 + 3×3 + 5×2 + 2×1 = ' + transportCost());
+    eng.caption('Óptimo: Z = 5×1 + 3×3 + 5×2 + 2×1 = ' + transportCost() + '   A,B → T1,T2,T3');
   }
 
   function drawSceneMaxflow(eng, t) {
+    var ctx = eng.ctx;
+    if (!ctx) return;
+    var w = eng._cssW || 640, h = eng._cssH || 360;
+    var accent = cssVar('--accent', '#C77D1A');
+    var ok = cssVar('--ok', '#2E7D5B');
+    var ink = cssVar('--ink', '#1F2A44');
     var nodes = {
-      A: [-2.4, 0.5, 0], B: [-0.8, 1.1, -1.1], C: [-0.8, 0.2, 1.1],
-      D: [0.8, 1.1, -1.1], E: [0.8, 0.2, 1.1], F: [2.4, 0.5, 0]
+      A: { x: 56, y: h * 0.52 },
+      B: { x: w * 0.32, y: h * 0.28 },
+      C: { x: w * 0.32, y: h * 0.76 },
+      D: { x: w * 0.58, y: h * 0.28 },
+      E: { x: w * 0.58, y: h * 0.76 },
+      F: { x: w - 56, y: h * 0.52 }
     };
     var arcs = [
       ['A', 'B', 9], ['A', 'C', 7], ['B', 'D', 7], ['B', 'E', 2],
       ['C', 'D', 4], ['C', 'E', 6], ['D', 'E', 3], ['D', 'F', 6], ['E', 'F', 9]
     ];
-    var stepIdx = Math.min(MAXFLOW_STEPS.length - 1, Math.floor((t * 0.35) % (MAXFLOW_STEPS.length + 1)));
+    var cycle = (t * 0.22) % (MAXFLOW_STEPS.length + 1);
+    var stepIdx = Math.min(MAXFLOW_STEPS.length - 1, Math.floor(cycle));
     if (stepIdx < 0) stepIdx = 0;
-    var done = Math.floor((t * 0.35) % (MAXFLOW_STEPS.length + 1)) >= MAXFLOW_STEPS.length;
+    var done = cycle >= MAXFLOW_STEPS.length;
     var active = done ? null : MAXFLOW_STEPS[stepIdx];
-    var accent = cssVar('--accent', '#C77D1A');
-    var ok = cssVar('--ok', '#2E7D5B');
-    var ink = cssVar('--ink', '#1F2A44');
-    var k, a, b, key, onPath;
+    var k, a, b, onPath;
     function isOn(u, v) {
       if (!active) return false;
       var j;
@@ -699,21 +742,17 @@
       a = nodes[arcs[k][0]];
       b = nodes[arcs[k][1]];
       onPath = isOn(arcs[k][0], arcs[k][1]);
-      eng.arrow(a, b, onPath ? accent : rgba(ok, 0.55), onPath ? 3.5 : 1.8);
-      key = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.18, (a[2] + b[2]) / 2];
-      eng.label(key, String(arcs[k][2]), ink);
+      arrow2d(ctx, a.x, a.y, b.x, b.y, onPath ? accent : rgba(ok, 0.55), onPath ? 3.4 : 1.8);
+      ctx.fillStyle = ink;
+      ctx.font = '12px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(arcs[k][2]), (a.x + b.x) / 2, (a.y + b.y) / 2 - 6);
     }
     Object.keys(nodes).forEach(function (name) {
-      eng.dot(nodes[name], name === 'A' || name === 'F' ? 9 : 6, name === 'F' ? accent : ok, true);
-      eng.label([nodes[name][0], nodes[name][1] + 0.38, nodes[name][2]], name, ink);
+      var r = name === 'A' || name === 'F' ? 16 : 13;
+      node2d(ctx, nodes[name].x, nodes[name].y, r, name === 'F' ? accent : ok, name, ink);
     });
     if (active) {
-      var u = (t * 1.2) % 1;
-      var segs = active.path.length - 1;
-      var si = Math.min(segs - 1, Math.floor(u * segs));
-      var su = u * segs - si;
-      var n0 = nodes[active.path[si]], n1 = nodes[active.path[si + 1]];
-      eng.dot([lerp(n0[0], n1[0], su), lerp(n0[1], n1[1], su), lerp(n0[2], n1[2], su)], 6, accent, true);
       eng.caption('Paso ' + (stepIdx + 1) + ': ' + active.path.join('→') + '  cuello ' + active.bot + '  acumulado ' + active.acc);
     } else {
       eng.caption('No queda camino. Flujo máximo = 15 = corte D→F(6)+E→F(9)');
@@ -803,8 +842,13 @@
       eng.dot(p, i === best ? 8 : 5, i === best ? accent : (feas ? ok : err), i === best);
       eng.label(p, '' + a[0] + a[1] + a[2] + (feas ? ' Z=' + g : ' no'), ink);
     }
-    eng.label([0, 2.2, 0], 'ejes: proy.1 · proy.2 · proy.3', ink);
-    eng.caption('Cubo de 3 proyectos. Mejor acá 110 Z=2,8. Examen (5 proy.): 1,3,4 Z=3,4');
+    eng.arrow([-1.1, 0, 0], [1.3, 0, 0], rgba(ink, 0.7), 2);
+    eng.arrow([0, 0, -1.1], [0, 0, 1.3], rgba(ink, 0.7), 2);
+    eng.arrow([0, 0, 0], [0, 1.9, 0], rgba(ink, 0.7), 2);
+    eng.label([1.4, 0.1, 0], 'proy.1', ink);
+    eng.label([0, 0.1, 1.4], 'proy.2', ink);
+    eng.label([0, 2.15, 0], 'proy.3', ink);
+    eng.caption('Cubo de 3 proyectos. Vista fija. Mejor acá 110 Z=2,8. Examen (5 proy.): 1,3,4 Z=3,4');
   }
 
   function drawSceneDual(eng) {
@@ -861,22 +905,27 @@
   };
   Engine.prototype.draw = function (t) {
     if (!this.ctx) return;
+    if (t == null) t = 0;
     this.clear();
     if (!FLAT[this.scene]) this.drawGrid();
     var fn = SCENES[this.scene] || drawSceneLpPrism;
     fn(this, t);
   };
 
+  Engine.prototype.needsAnim = function () {
+    return !!ANIMATED[this.scene] && !prefersReduced() && !STATIC[this.scene];
+  };
+
   Engine.prototype.loop = function () {
     var self = this;
+    if (!this.needsAnim()) {
+      this.draw(0);
+      return;
+    }
     function frame() {
       if (!self.running) return;
       self.draw(self.now());
       self.raf = requestAnimationFrame(frame);
-    }
-    if (prefersReduced()) {
-      this.draw(0);
-      return;
     }
     this.raf = requestAnimationFrame(frame);
   };
@@ -890,13 +939,19 @@
     wrap.className = 'viz3d-wrap canvas-wrap wide';
     var canvas = document.createElement('canvas');
     canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', caption || ('Animación 3D: ' + name));
+    canvas.setAttribute('aria-label', caption || ('Gráfico: ' + name));
     wrap.appendChild(canvas);
     var hint = document.createElement('p');
     hint.className = 'muted viz3d-hint';
-    hint.textContent = FLAT[name]
-      ? 'Gráfico fijo. Se lee de izquierda a derecha.'
-      : 'Arrastre un poco para girar. No da la vuelta sola.';
+    if (FLAT[name]) {
+      hint.textContent = ANIMATED[name]
+        ? 'Gráfico 2D. Flechas de izquierda a derecha. No gira. El paso activo cambia solo.'
+        : 'Gráfico fijo. Flechas de izquierda a derecha. No gira.';
+    } else if (STATIC[name]) {
+      hint.textContent = 'Vista 3D fija. No gira sola ni al arrastrar.';
+    } else {
+      hint.textContent = 'Arrastre un poco para girar. No da la vuelta sola. Las flechas marcan el método.';
+    }
     wrap.appendChild(hint);
     var L = LEGENDS[name];
     if (L) {
@@ -910,9 +965,13 @@
     el.appendChild(wrap);
     var eng = new Engine(canvas);
     eng.scene = SCENES[name] ? name : 'lp-prism';
+    if (eng.canOrbit()) wrap.classList.add('can-orbit');
     eng.fit();
     eng.loop();
-    var onResize = function () { eng.fit(); };
+    var onResize = function () {
+      eng.fit();
+      if (!eng.needsAnim()) eng.draw(0);
+    };
     window.addEventListener('resize', onResize);
     IO.registerCleanup(function () {
       window.removeEventListener('resize', onResize);
@@ -940,6 +999,10 @@
     maxflowSteps: MAXFLOW_STEPS,
     gaF: GA_F,
     legends: LEGENDS,
-    Engine: Engine
+    Engine: Engine,
+    flatScenes: FLAT,
+    staticScenes: STATIC,
+    animatedScenes: ANIMATED,
+    pipelineSteps: PIPELINE_STEPS
   };
 })(typeof window !== 'undefined' ? window : globalThis);

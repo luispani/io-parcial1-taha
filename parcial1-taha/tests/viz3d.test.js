@@ -52,10 +52,26 @@ test('GA fitness at x=0 is 1.2', () => {
   assert.ok(Math.abs(V.gaF(0) - 1.2) < 1e-9);
 });
 
-test('pipeline and dual are flat (no spin); legends still present', () => {
-  assert.ok(V.legends['io-pipeline']);
-  assert.ok(V.legends['dual-balance']);
-  assert.ok(V.scenes.indexOf('io-pipeline') !== -1);
+test('pipeline is Taha 5 phases, left to right, static', () => {
+  assert.equal(V.pipelineSteps.length, 5);
+  assert.equal(V.pipelineSteps[0].t, 'Definir');
+  assert.equal(V.pipelineSteps[4].t, 'Implantar');
+  assert.ok(V.staticScenes['io-pipeline']);
+  assert.ok(V.flatScenes['io-pipeline']);
+  assert.ok(/5 fases/.test(V.legends['io-pipeline'].what));
+  assert.ok(/izquierda a derecha/.test(V.legends['io-pipeline'].how));
+});
+
+test('transport, maxflow and dual never orbit; cube is frozen', () => {
+  assert.ok(V.flatScenes['transport-3d']);
+  assert.ok(V.staticScenes['transport-3d']);
+  assert.ok(V.flatScenes['maxflow-pipes']);
+  assert.ok(V.animatedScenes['maxflow-pipes']);
+  assert.ok(V.staticScenes['dual-balance']);
+  assert.ok(V.staticScenes['binary-cube']);
+  assert.equal(!!V.animatedScenes['io-pipeline'], false);
+  assert.equal(!!V.animatedScenes['transport-3d'], false);
+  assert.equal(!!V.animatedScenes['binary-cube'], false);
 });
 
 test('project is a finite perspective map', () => {

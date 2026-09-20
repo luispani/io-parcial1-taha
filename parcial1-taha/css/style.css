@@ -505,10 +505,11 @@ details.solution summary {
   display: block;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  cursor: grab;
+  cursor: default;
   background: #101624;
 }
-.viz3d-wrap canvas:active { cursor: grabbing; }
+.viz3d-wrap.can-orbit canvas { cursor: grab; }
+.viz3d-wrap.can-orbit canvas:active { cursor: grabbing; }
 .viz3d-hint { margin: 6px 0 0; font-size: .82rem; }
 .viz3d-legend {
   margin-top: 10px;
